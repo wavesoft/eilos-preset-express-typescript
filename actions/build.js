@@ -1,4 +1,4 @@
-const configWebpackBase = require("../config/webpack.config.base");
+const configWebpackBase = require("../config/webpack.config");
 const configTs = require("../config/tsconfig");
 const tsTypings = require("../config/tstypings");
 
