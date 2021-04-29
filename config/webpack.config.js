@@ -36,7 +36,7 @@ module.exports = (ctx) => {
   // Check if we are building a library
   const library = ctx.getConfig("library", null);
   const libraryOutput = {};
-  if (library != null) {
+  if (library) {
     libraryOutput.libraryTarget = "umd";
 
     if (typeof library === "string") {
@@ -47,13 +47,23 @@ module.exports = (ctx) => {
         libraryTarget: libraryOutput.target || "umd",
       });
     }
+
+    // If DLL Support is enabled, emit a DLL
+    if (ctx.getConfig("dll", true)) {
+      plugins.push(
+        new webpack.DllPlugin({
+          path: path.join(ctx.getDirectory("dist"), "[name]-manifest.json"),
+          name: "[name]_[fullhash]",
+        })
+      );
+    }
   }
 
   // Enable typescript optimisations if we are not building a library. That's a
   // limitation of the `ts-loader` plugin, since when we set `transpileOnly: true`
   // the generator won't emit type files.
   const tsLoaderOptions = {};
-  if (library == null) {
+  if (!library) {
     plugins.push(
       new ForkTsCheckerWebpackPlugin({
         typescript: {
@@ -65,6 +75,40 @@ module.exports = (ctx) => {
     Object.assign(tsLoaderOptions, {
       happyPackMode: true,
       transpileOnly: true,
+    });
+  }
+
+  // If we have external references, build the webpack configuration for them
+  const externalModules = ctx.getConfig("externals", []);
+  const externals = {};
+  if (externalModules && externalModules.length) {
+    externalModules.forEach((extern) => {
+      let resolved = false;
+
+      // If we have DLL support, check if we can source a manifest from them
+      if (ctx.getConfig("dll", true)) {
+        const externJs = ctx.resolvePackagePath(extern);
+        if (externJs) {
+          // Strip .js extension and replace with `-manifest.json` and check if
+          // we can still find it
+          const externManifest = externJs.replace(/\.js$/, "-manifest.json");
+          if (fs.existsSync(externManifest)) {
+            resolved = true;
+            plugins.push(
+              new webpack.DllReferencePlugin({
+                context: path.dirname(externManifest),
+                manifest: require(externManifest)
+              }),
+            );
+          }
+        }
+      }
+
+      // If it was not resolved using DLL, resolve using commonjs2 linkage
+      // since we are building for node.js target
+      if (!resolved) {
+        externalModules[extern] = `commonjs2 ${extern}`;
+      }
     });
   }
 
@@ -126,6 +170,7 @@ module.exports = (ctx) => {
       ],
     },
     plugins: plugins,
+    externals,
     resolve: {
       extensions: ["*", ".js", ".jsx", ".ts", ".tsx"],
     },
