@@ -35,19 +35,24 @@ module.exports = {
   library: null,
 
   //////////////////////////////////////////////////////////////////////
-  // Custom component configuration
+  // Custom resource linking
   //////////////////////////////////////////////////////////////////////
 
   /**
    * Indicates that DLL resolution/definition is required
    *
    * ---
-   * dll: false                     // Do not emit DLL manifest for libraries
+   * emitDll: false                 // Do not emit DLL manifest for libraries
    * ---
-   * dll: true                      // Emit DLL manifest for the libraries built
+   * emitDll: true                  // Emit DLL manifest for the libraries built
    * ---
    */
-  dll: true,
+  emitDll: false,
+
+  /**
+   * References to other packages built with DLL support
+   */
+  dlls: [],
 
   /**
    * Indicates the resources that are external to the project and must be

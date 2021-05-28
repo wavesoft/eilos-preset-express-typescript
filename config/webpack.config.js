@@ -1,14 +1,15 @@
 const fs = require("fs");
 const path = require("path");
+const webpack = require("webpack");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
-const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const ForkTsCheckerWebpackPlugin = require("fork-ts-checker-webpack-plugin");
+const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 
 function getEntryConfig(ctx) {
   const entry = ctx.getConfig("entry");
   if (typeof entry === "string") {
     return {
-      index: entry,
+      index: [entry],
     };
   }
 
@@ -49,11 +50,15 @@ module.exports = (ctx) => {
     }
 
     // If DLL Support is enabled, emit a DLL
-    if (ctx.getConfig("dll", true)) {
+    if (ctx.getConfig("emitDll", false)) {
       plugins.push(
         new webpack.DllPlugin({
+          context: ctx.getDirectory("project"),
           path: path.join(ctx.getDirectory("dist"), "[name]-manifest.json"),
-          name: "[name]_[fullhash]",
+          name: library,
+          entryOnly: true,
+          format: true,
+          type: libraryOutput.target || "umd",
         })
       );
     }
@@ -69,6 +74,7 @@ module.exports = (ctx) => {
         typescript: {
           context: ctx.getDirectory("project"),
           configFile: ctx.getConfigFilePath("tsconfig.json"),
+          sourceType: "umd"
         },
       })
     );
@@ -83,31 +89,29 @@ module.exports = (ctx) => {
   const externals = {};
   if (externalModules && externalModules.length) {
     externalModules.forEach((extern) => {
-      let resolved = false;
+      externals[extern] = `commonjs2 ${extern}`;
+    });
+  }
 
-      // If we have DLL support, check if we can source a manifest from them
-      if (ctx.getConfig("dll", true)) {
-        const externJs = ctx.resolvePackagePath(extern);
-        if (externJs) {
-          // Strip .js extension and replace with `-manifest.json` and check if
-          // we can still find it
-          const externManifest = externJs.replace(/\.js$/, "-manifest.json");
-          if (fs.existsSync(externManifest)) {
-            resolved = true;
-            plugins.push(
-              new webpack.DllReferencePlugin({
-                context: path.dirname(externManifest),
-                manifest: require(externManifest)
-              }),
-            );
-          }
+  // If we have DLLs, build the webpack configuration for them
+  const dlls = ctx.getConfig("dlls", []);
+  if (dlls && dlls.length) {
+    dlls.forEach((dll) => {
+      const externJs = ctx.resolveProjectPackage(dll);
+      if (externJs) {
+        // Strip .js extension and replace with `-manifest.json` and check if
+        // we can still find it
+        const externManifest = externJs.replace(/\.js$/, "-manifest.json");
+        if (fs.existsSync(externManifest)) {
+          const baseDir = ctx.resolvePackagePath(dll);
+          resolved = true;
+          plugins.push(
+            new webpack.DllReferencePlugin({
+              context: baseDir,
+              manifest: require(externManifest)
+            }),
+          );
         }
-      }
-
-      // If it was not resolved using DLL, resolve using commonjs2 linkage
-      // since we are building for node.js target
-      if (!resolved) {
-        externalModules[extern] = `commonjs2 ${extern}`;
       }
     });
   }
