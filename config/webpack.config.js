@@ -42,10 +42,10 @@ module.exports = (ctx) => {
 
     if (typeof library === "string") {
       libraryOutput.library = library;
-    } else {
+    } else if (typeof library === "object") {
       Object.assign(libraryOutput, {
-        library: libraryOutput.name,
-        libraryTarget: libraryOutput.target || "umd",
+        library: library.name,
+        libraryTarget: library.target || "commonjs2",
       });
     }
 
@@ -58,7 +58,7 @@ module.exports = (ctx) => {
           name: library,
           entryOnly: true,
           format: true,
-          type: libraryOutput.target || "umd",
+          type: library.target || "commonjs2",
         })
       );
     }
